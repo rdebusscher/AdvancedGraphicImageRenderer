@@ -1,5 +1,5 @@
 Advanced PrimeFaces Graphic Image renderer for dynamic content
-Copyright 2012 De Busscher Rudy
+Copyright 2012-2015 De Busscher Rudy
 
 ------------------------------------------------------------------------
 See the file LICENSE.txt

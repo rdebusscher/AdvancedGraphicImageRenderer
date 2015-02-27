@@ -26,10 +26,10 @@
     <artifactId>advanced-graphic-image</artifactId>
     <name>Advanced Graphic image renderer</name>
     <packaging>jar</packaging>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
 
     <properties>
-        <primefaces.version>4.0</primefaces.version>
+        <primefaces.version>5.0</primefaces.version>
         <myfaces.version>2.1.6</myfaces.version>
     </properties>
 
@@ -94,22 +94,22 @@
             <groupId>org.apache.myfaces.core</groupId>
             <artifactId>myfaces-api</artifactId>
             <version>${myfaces.version}</version>
-			<scope>provided</scope>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>
             <groupId>javax.servlet</groupId>
             <artifactId>jstl</artifactId>
             <version>1.2</version>
-<scope>provided</scope>
-			</dependency>
+            <scope>provided</scope>
+        </dependency>
 
 
         <dependency>
             <groupId>org.primefaces</groupId>
             <artifactId>primefaces</artifactId>
             <version>${primefaces.version}</version>
-			<scope>provided</scope>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>javax.servlet</groupId>

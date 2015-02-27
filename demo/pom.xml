@@ -26,10 +26,10 @@
     <artifactId>demo</artifactId>
     <name>Advanced Graphic Image demo</name>
     <packaging>war</packaging>
-    <version>1.0.0</version>
+    <version>1.2.0</version>
 
     <properties>
-        <primefaces.version>4.0</primefaces.version>
+        <primefaces.version>5.0</primefaces.version>
         <myfaces.version>2.1.6</myfaces.version>
     </properties>
 
@@ -86,7 +86,7 @@
         <dependency>
             <groupId>be.rubus.web.jsf.primefaces</groupId>
             <artifactId>advanced-graphic-image</artifactId>
-            <version>1.1.0</version>
+            <version>1.2.0</version>
         </dependency>
 
         <dependency>
