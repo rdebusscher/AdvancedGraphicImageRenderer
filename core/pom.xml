@@ -26,10 +26,10 @@
     <artifactId>advanced-graphic-image</artifactId>
     <name>Advanced Graphic image renderer</name>
     <packaging>jar</packaging>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
 
     <properties>
-        <primefaces.version>3.4.1</primefaces.version>
+        <primefaces.version>4.0</primefaces.version>
         <myfaces.version>2.1.6</myfaces.version>
     </properties>
 

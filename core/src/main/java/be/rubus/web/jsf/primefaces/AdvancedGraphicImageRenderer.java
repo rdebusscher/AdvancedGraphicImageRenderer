@@ -20,8 +20,10 @@ package be.rubus.web.jsf.primefaces;
 
 import org.primefaces.component.graphicimage.GraphicImage;
 import org.primefaces.component.graphicimage.GraphicImageRenderer;
+import org.primefaces.context.RequestContext;
 import org.primefaces.model.StreamedContent;
 import org.primefaces.util.Constants;
+import org.primefaces.util.StringEncrypter;
 
 import javax.faces.application.Resource;
 import javax.faces.component.UIComponent;
@@ -66,7 +68,7 @@ public class AdvancedGraphicImageRenderer extends GraphicImageRenderer {
 	}
 
 	@Override
-	protected String getImageSrc(FacesContext context, GraphicImage image) {
+	protected String getImageSrc(FacesContext context, GraphicImage image) throws Exception {
 		if (determineIfAdvancedRendering(image)) {
 			String src;
 			Object value = image.getValue();
@@ -76,7 +78,9 @@ public class AdvancedGraphicImageRenderer extends GraphicImageRenderer {
 			Resource resource = context.getApplication().getResourceHandler()
 					.createResource("dynamiccontent", "advancedPrimefaces", streamedContent.getContentType());
 			String resourcePath = resource.getRequestPath();
-			String rid = createUniqueContentId(context);
+            StringEncrypter strEn = RequestContext.getCurrentInstance().getEncrypter();
+            String rid = strEn.encrypt(image.getValueExpression("value").getExpressionString());
+
 			StringBuilder builder = new StringBuilder(resourcePath);
 			GraphicImageManager graphicImageManager = GraphicImageUtil.retrieveManager(context);
 			graphicImageManager.registerImage(streamedContent, rid);
