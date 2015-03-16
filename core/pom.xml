@@ -33,6 +33,18 @@
         <myfaces.version>2.1.6</myfaces.version>
     </properties>
 
+    <distributionManagement>
+        <repository>
+            <id>nexus_C4J</id>
+            <name>OpenSource Nexus of C4J</name>
+            <url>http://nexus-osc4j.rhcloud.com/content/repositories/releases</url>
+        </repository>
+        <snapshotRepository>
+            <id>nexus_C4J</id>
+            <name>OpenSource Nexus of C4J</name>
+            <url>http://nexus-osc4j.rhcloud.com/content/repositories/snapshots</url>
+        </snapshotRepository>
+    </distributionManagement>
 
     <build>
         <finalName>
