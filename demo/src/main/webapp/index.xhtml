@@ -26,14 +26,14 @@
 
 <h:body>
 
-    <comp:customComp image="#{imageBean.image}"/>
+    <comp:customComp image="#{imageBean.image}" id="cust"/>
 
     <p:dataTable value="#{imageBean.dataList}" var="data">
         <p:column headerText="Code">
             <h:outputText value="#{data.code}"/>
         </p:column>
         <p:column headerText="Image">
-            <p:graphicImage value="#{data.image}">
+            <p:graphicImage value="#{data.image}" id="tbl">
                 <!--x:advancedRenderering value="true"/-->
             </p:graphicImage>
         </p:column>

@@ -9,7 +9,9 @@ Version | For PrimeFaces
 -----------| -------------
 1.0     | 3.5
 1.1     | 4.0
-1.2     | 5.x
+1.2.1   | 5.x
+
+Version 1.2 has a bug!
 
 When you want to add the artifact, put following snippets in your `pom.xml`
 
@@ -23,5 +25,5 @@ When you want to add the artifact, put following snippets in your `pom.xml`
     <dependency>
         <groupId>be.rubus.web.jsf.primefaces</groupId>
         <artifactId>advanced-graphic-image</artifactId>
-        <version>1.2.0</version>
+        <version>1.2.1</version>
     </dependency>
