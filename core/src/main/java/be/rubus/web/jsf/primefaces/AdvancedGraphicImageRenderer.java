@@ -36,20 +36,33 @@ import java.util.UUID;
 public class AdvancedGraphicImageRenderer extends GraphicImageRenderer {
 
     private boolean determineIfAdvancedRendering(GraphicImage image) {
-        boolean result = false;
+        // (1) Regardles of the user asking to use advanced rendering explicitly by using the ui element
+        // we simply do not override the default primefaces behavior if the Image Is not returning streamed conent
+        if (image.getValue() == null) {
+            // otherwise the renderer would break with null pointer exception on get image src
+            // the user might want the advanced algorithm to run but we know already it would be doomed to fail
+            return false;
+        }
+        boolean weAreDealingWithSaticResource = !(image.getValue() instanceof StreamedContent);
+        if (weAreDealingWithSaticResource) {
+            return false;
+        }
 
-        boolean isStreamedContent = image.getValue() instanceof StreamedContent;
+        // (2) we are dealing with an attribute value that is a streamed content
+        // if the user is forcing us explictely to to use the advanced graphic image renderer algorithm
+        // then true
         Boolean advancedMarker = (Boolean) image.getAttributes().get(AdvancedRendererHandler.ADVANCED_RENDERING);
-
-        if (isStreamedContent && advancedMarker == null) {
-            result = determineSpecificParents(image);
+        if (advancedMarker != null && advancedMarker) {
+            return true;
         }
 
-        if (!result && advancedMarker != null && advancedMarker) {
-            result = true;
-        }
+        // (3) Streamed content but the user is not forcing us to absolutely use the AdvancedGraphicImageRneder
+        // algorithm than use the "smart" strategy to determine weather this special algorithm is needed
+        // the hope is to use this specific algorithm as little as possible and let primefaces run the show on its own
+        // however there are some ValueExpression that we know already that p:graphicImage will fail to evaluate during
+        // ResourceHandler call
+        return determineSpecificParents(image);
 
-        return result;
     }
 
     private boolean determineSpecificParents(GraphicImage image) {
@@ -76,25 +89,20 @@ public class AdvancedGraphicImageRenderer extends GraphicImageRenderer {
                     .createResource("dynamiccontent", "advancedPrimefaces", streamedContent.getContentType());
             String resourcePath = resource.getRequestPath();
 
-            // Create a unique image id based on the component being rendered
-            // NOTE: The fowllowing is a change that was done on the original repository on upgrade from 3.4 to 4.0
-            // - we can not use this code - 3.5 does not support
-            // StringEncrypter strEn = RequestContext.getCurrentInstance().getEncrypter();
-            // String rid = strEn.encrypt(image.getValueExpression("value").getExpressionString());
-            // NOTE: This is the orignal implmentation - not good not reselient to page refresh
-            // creates leakage of temporary files in the folder
-            // String rid = createUniqueContentId(context);
-            // WORK AROUND IMPLEMENTATION:
-            // this work around implementation creates a uniqueId using the string hashcode based on the uiComponent
-            // ClientId and value expression
-            // the outcome should be deterministic and not create file leakage.
-            String id = String.format("%1$s_%2$s", image.getClientId(), image.getValueExpression("value")
-                    .getExpressionString());
-            String rid = String.valueOf(id.hashCode());
+            // Create a canonical id for the image to be returned for user
+            // NOTE: this step is crucial since it needs to satisfy the following properties:
+            // (1) Each time new data exists to be presented to the user the canonical id must led to the generation of
+            // a new uniqueId
+            // that will be linked to the img.src
+            // (2) each time the user refreshes the page and no new content stream exists to be show, the old uniqueId
+            // must be re-used
+            String canonicalIdVerbose = String.format("%1$s_%2$s", image.getClientId(),
+                    image.getValueExpression("value").getExpressionString());
+            String canonicalId = String.valueOf(canonicalIdVerbose.hashCode());
 
             StringBuilder builder = new StringBuilder(resourcePath);
             GraphicImageManager graphicImageManager = GraphicImageUtil.retrieveManager(context);
-            graphicImageManager.registerImage(streamedContent, rid);
+            String rid = graphicImageManager.registerImage(streamedContent, canonicalId);
 
             builder.append("&").append(Constants.DYNAMIC_CONTENT_PARAM).append("=").append(rid);
 

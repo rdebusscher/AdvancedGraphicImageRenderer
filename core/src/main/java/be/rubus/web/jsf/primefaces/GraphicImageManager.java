@@ -35,6 +35,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
@@ -50,9 +51,25 @@ public class GraphicImageManager implements HttpSessionBindingListener {
 
     /**
      * AdvancedGraphicImageRenderer * Contains dynamic graphic image files creates in the context of the current
-     * session.
+     * session. A map of UniqueIds -> To AbsoluteFilePath
      */
     private final Map<String, String> storedContent = new ConcurrentHashMap<String, String>();
+
+    /**
+     * Map of canonicalId to count of times temporary images have been produced for the canonical id.
+     *
+     * <P>
+     * MOTIVATION: A browser keeps a cache of image resources it has already downloaded. If we have p:graphiImage
+     * component that points to a temporary file with uniqueId ref value, the browser will not download that image a
+     * second time until the img.src attribute points a new location. Therefore we have a two fold problem. (1) When the
+     * user refreshes a page, the StreamContent will not have changed and the stream is closed, therefore it is ok to
+     * led the img.src keep whatever uniqueId value is already in the browser page
+     *
+     * (2) When the user uplaods a new file image for the same uiComponent, we want to save a new tmp file, delete the
+     * old one and we especially want the browser to download it. Therefore, we need to produce a new uniqueId.
+     *
+     */
+    private final Map<String, Long> canonicalIdToGenerationCount = new HashMap<String, Long>();
 
     @Override
     public void valueBound(HttpSessionBindingEvent event) {
@@ -74,43 +91,55 @@ public class GraphicImageManager implements HttpSessionBindingListener {
      *
      * @param content
      *            the primefaces streamed content for an image which should be written out to an OS temporary file.
-     * @param uniqueId
-     *            a unique id for the current user session and image access, used to create a new unique temp file
+     * @param canonicalId
+     *            a unique id that essentially identifies a ui component, it does not change throughout time for that
+     *            graphic image component.
      *
+     * @return a uniqueId that is based on the canonical id and whose value changes each time a new image resource needs
+     *         to be saved.
      */
-    public void registerImage(StreamedContent content, String uniqueId) {
+    public synchronized String registerImage(final StreamedContent content, final String canonicalId) {
         final InputStream inputStream = content.getStream();
         // (1) Trivial scenario - there is nothing to be done here because
         // the user is most likely doing a page refresh and the image already exists in a temp file location
-        if (!isInputStreamAvailable(inputStream)) {
+        final String oldUniqueId = getCurrentUniqueId(canonicalId);
+        if (!GraphicImageUtil.isInputStreamAvailable(inputStream)) {
             LOGGER.log(Level.FINEST,
                     "The streamed content for uniqueId will not be saved to a new file since it already exists in the cache. UiqueId: "
-                            + uniqueId);
-            return;
+                            + oldUniqueId);
+            return oldUniqueId;
         }
 
         // (2) The primefaces stream content is opened and it should be possible to write the data to a file
         // we want to make sure we do not create file creation leakage for the same unique id
-        if (storedContent.containsKey(uniqueId)) {
-            File tempFileCreatedInAPreviousRenderingOfCurrentView = new File(storedContent.get(uniqueId));
+        if (storedContent.containsKey(oldUniqueId)) {
+            File tempFileCreatedInAPreviousRenderingOfCurrentView = new File(storedContent.get(oldUniqueId));
             if (tempFileCreatedInAPreviousRenderingOfCurrentView.exists()) {
                 tempFileCreatedInAPreviousRenderingOfCurrentView.delete();
+                storedContent.remove(oldUniqueId);
                 LOGGER.log(
                         Level.FINE,
                         String.format(
                                 "Deleting temp file with absolute path: %1$s . A new primefaces dynamic stream is available to write data for the same ui coponent"
-                                        + " and we do not wish to keep alive stale data.", storedContent.get(uniqueId)));
+                                        + " and we do not wish to keep alive stale data.",
+                                storedContent.get(oldUniqueId)));
             }
         }
 
-        // (3) The uniqueId is either brand new or we are dealing with a rendering of new content
+        // (3) Since we will be saving a new temp image we want to make sure that we advance the uniqueId
+        // so that the browser is sure do download a new image for this uniqueId instead of keep using the old cached
+        // image
+        incrementCanonicalIdCount(canonicalId);
+        String newUniqueId = getCurrentUniqueId(canonicalId);
+
+        // (4) The uniqueId is either brand new or we are dealing with a rendering of new content
         // for the same UI component and we wish the data of the image not to be stale.
         // A new temp file will produced with the stream content
         ReadableByteChannel inputChannel = null;
         WritableByteChannel outputChannel = null;
         try {
-            File tempFile = File.createTempFile(uniqueId, "primefaces");
-            storedContent.put(uniqueId, tempFile.getAbsolutePath());
+            File tempFile = File.createTempFile(newUniqueId, "primefaces");
+            storedContent.put(newUniqueId, tempFile.getAbsolutePath());
             // get a channel from the stream
             inputChannel = Channels.newChannel(inputStream);
             outputChannel = Channels.newChannel(new FileOutputStream(tempFile));
@@ -142,20 +171,9 @@ public class GraphicImageManager implements HttpSessionBindingListener {
                         "Unexpected error took place while attempting to close the output stream of the temp file", e);
             }
         }
-    }
 
-    /**
-     * Determines if a given input stream has bytes available to be read, this normally only happens the first time a
-     * view is being rendered, or when a new image gets uploaded. Upon page refresh, for example, the StreamContent will
-     * be closed and we want to continue using the previously saved tmp image.
-     */
-    private boolean isInputStreamAvailable(InputStream inputStream) {
-        try {
-            return inputStream.available() > 0;
-        } catch (Exception ignoreE) {
-            // The GraphicImageManager has closed the input stream for the tmp file
-            return false;
-        }
+        // A new temp file was saved under this uniqueId
+        return newUniqueId;
     }
 
     public StreamedContent retrieveImage(String uniqueId) {
@@ -191,5 +209,47 @@ public class GraphicImageManager implements HttpSessionBindingListener {
         while (buffer.hasRemaining()) {
             dest.write(buffer);
         }
+    }
+
+    // /////////////////////////////////////////////////
+    // BEGIN: CANONICAL ID MANAGEMENT
+    // /////////////////////////////////////////////////
+    /**
+     *
+     * @param canonicalUniqueId
+     *            the canonical id for the ui component
+     * @return a unique dynamic resource id for the ui component which corresponds to an association between the
+     *         canonical id and the current index of generated content for the component
+     */
+    private String getCurrentUniqueId(String canonicalUniqueId) {
+        return String
+                .format("CANONIAL%1$sUNIQUE%2$s", canonicalUniqueId, getCurrentCanonicalIdCount(canonicalUniqueId));
+    }
+
+    /**
+     *
+     * @param canonicalUniqueId
+     *            A unique id for an image that reflects a specific UI component. This value will not change for that
+     *            component id, regardless of underlying stream changing with file uploads
+     * @return The number of times that canonical id has been correlated with the saving of new streams
+     */
+    private Long getCurrentCanonicalIdCount(String canonicalUniqueId) {
+        if (!canonicalIdToGenerationCount.containsKey(canonicalUniqueId)) {
+            canonicalIdToGenerationCount.put(canonicalUniqueId, 0l);
+        }
+        return canonicalIdToGenerationCount.get(canonicalUniqueId);
+    }
+
+    /**
+     *
+     * @param canonicalUniqueId
+     *            A unique id for an image that reflects a specific UI component. This value will not change for that
+     *            component id, regardless of underlying stream changing with file uploads
+     * @return the increment value of the canonical id
+     */
+    private Long incrementCanonicalIdCount(String canonicalUniqueId) {
+        Long nextCanonicalIdCount = getCurrentCanonicalIdCount(canonicalUniqueId) + 1;
+        canonicalIdToGenerationCount.put(canonicalUniqueId, nextCanonicalIdCount);
+        return nextCanonicalIdCount;
     }
 }
