@@ -29,7 +29,7 @@
     <version>1.0.1-SNAPSHOT</version>
 
     <properties>
-        <primefaces.version>3.4.1</primefaces.version>
+        <primefaces.version>3.5</primefaces.version>
         <myfaces.version>2.1.6</myfaces.version>
     </properties>
 
