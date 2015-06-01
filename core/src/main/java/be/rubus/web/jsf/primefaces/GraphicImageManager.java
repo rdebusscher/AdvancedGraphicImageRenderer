@@ -30,6 +30,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
@@ -48,7 +49,8 @@ public class GraphicImageManager implements HttpSessionBindingListener {
     private static final Logger LOGGER = Logger.getLogger(GraphicImageManager.class.getCanonicalName());
 
     /**
-     * Contains dynamic graphic image files creates in the context of the current session.
+     * AdvancedGraphicImageRenderer * Contains dynamic graphic image files creates in the context of the current
+     * session.
      */
     private final Map<String, String> storedContent = new ConcurrentHashMap<String, String>();
 
@@ -77,25 +79,40 @@ public class GraphicImageManager implements HttpSessionBindingListener {
      *
      */
     public void registerImage(StreamedContent content, String uniqueId) {
-
+        final InputStream inputStream = content.getStream();
         // (1) Trivial scenario - there is nothing to be done here because
         // the user is most likely doing a page refresh and the image already exists in a temp file location
-        if (storedContent.containsKey(uniqueId)) {
+        if (!isInputStreamAvailable(inputStream)) {
             LOGGER.log(Level.FINEST,
                     "The streamed content for uniqueId will not be saved to a new file since it already exists in the cache. UiqueId: "
                             + uniqueId);
             return;
         }
 
-        // (2) The uniqueId is brand new one so the streamed cotent has not yet been closed
-        // and we can save the data to a temporary file.
+        // (2) The primefaces stream content is opened and it should be possible to write the data to a file
+        // we want to make sure we do not create file creation leakage for the same unique id
+        if (storedContent.containsKey(uniqueId)) {
+            File tempFileCreatedInAPreviousRenderingOfCurrentView = new File(storedContent.get(uniqueId));
+            if (tempFileCreatedInAPreviousRenderingOfCurrentView.exists()) {
+                tempFileCreatedInAPreviousRenderingOfCurrentView.delete();
+                LOGGER.log(
+                        Level.FINE,
+                        String.format(
+                                "Deleting temp file with absolute path: %1$s . A new primefaces dynamic stream is available to write data for the same ui coponent"
+                                        + " and we do not wish to keep alive stale data.", storedContent.get(uniqueId)));
+            }
+        }
+
+        // (3) The uniqueId is either brand new or we are dealing with a rendering of new content
+        // for the same UI component and we wish the data of the image not to be stale.
+        // A new temp file will produced with the stream content
         ReadableByteChannel inputChannel = null;
         WritableByteChannel outputChannel = null;
         try {
             File tempFile = File.createTempFile(uniqueId, "primefaces");
             storedContent.put(uniqueId, tempFile.getAbsolutePath());
             // get a channel from the stream
-            inputChannel = Channels.newChannel(content.getStream());
+            inputChannel = Channels.newChannel(inputStream);
             outputChannel = Channels.newChannel(new FileOutputStream(tempFile));
             // copy the channels
             fastChannelCopy(inputChannel, outputChannel);
@@ -124,6 +141,20 @@ public class GraphicImageManager implements HttpSessionBindingListener {
                 LOGGER.log(Level.SEVERE,
                         "Unexpected error took place while attempting to close the output stream of the temp file", e);
             }
+        }
+    }
+
+    /**
+     * Determines if a given input stream has bytes available to be read, this normally only happens the first time a
+     * view is being rendered, or when a new image gets uploaded. Upon page refresh, for example, the StreamContent will
+     * be closed and we want to continue using the previously saved tmp image.
+     */
+    private boolean isInputStreamAvailable(InputStream inputStream) {
+        try {
+            return inputStream.available() > 0;
+        } catch (Exception ignoreE) {
+            // The GraphicImageManager has closed the input stream for the tmp file
+            return false;
         }
     }
 

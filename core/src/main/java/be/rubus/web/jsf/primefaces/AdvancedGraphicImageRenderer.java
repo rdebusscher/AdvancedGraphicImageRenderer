@@ -88,7 +88,7 @@ public class AdvancedGraphicImageRenderer extends GraphicImageRenderer {
             // this work around implementation creates a uniqueId using the string hashcode based on the uiComponent
             // ClientId and value expression
             // the outcome should be deterministic and not create file leakage.
-            String id = String.format("%1$s_", image.getClientId(), image.getValueExpression("value")
+            String id = String.format("%1$s_%2$s", image.getClientId(), image.getValueExpression("value")
                     .getExpressionString());
             String rid = String.valueOf(id.hashCode());
 
