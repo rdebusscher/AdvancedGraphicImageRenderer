@@ -1,20 +1,14 @@
 /**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the NOTICE
+ * file distributed with this work for additional information regarding copyright ownership. The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
  */
 package be.rubus.web.jsf.primefaces;
 
@@ -49,6 +43,25 @@ public class GraphicImageManager implements HttpSessionBindingListener {
 
     private static final Logger LOGGER = Logger.getLogger(GraphicImageManager.class.getCanonicalName());
 
+    private static final int MIN_FIXED_RANDOM_VALUE_FOR_USER_SESSION = 100;
+    private static final int MAX_FIXED_RANDOM_VALUE_FOR_USER_SESSION = 50000;
+
+    /**
+     * The session random id is a random value produced on creation of the session bean. Every client session will have
+     * a different value. The point of this value is to ensure that when a p:graphicImage is rendered using the advanced
+     * algorithm, the unique id produced will never be the same across different sessions or application startup, thus
+     * bypassing the caching of the browser.
+     *
+     * <P>
+     * MOTIVATION: * In the current implementation the uniqueIds produced for the dynamic resources are of the form:
+     *
+     * (1)CANONICALIDsomeInteger(2)INCRAMENTALsomeIncrementIntegerRANDOMaValueThatIsUniqueForEachSession
+     *
+     * Such a UNIQUE id syntax the uniqueId to produced in a deterministic manner, such that when there is a page
+     * refresh we are able to discover the uniqueId had had been produced on the last execution of the renderer for the
+     * UI component being redendered, but when there is new content to be streamed a new uniqueid is produced.
+     */
+    private final String sessionRandomId;
     /**
      * AdvancedGraphicImageRenderer * Contains dynamic graphic image files creates in the context of the current
      * session. A map of UniqueIds -> To AbsoluteFilePath
@@ -70,6 +83,15 @@ public class GraphicImageManager implements HttpSessionBindingListener {
      *
      */
     private final Map<String, Long> canonicalIdToGenerationCount = new HashMap<String, Long>();
+
+    /**
+     * Constructs a graphic image manager which will keep track of the temporary files saved for the current living
+     * session.
+     */
+    public GraphicImageManager() {
+        this.sessionRandomId = String.valueOf(randomWithRange(MIN_FIXED_RANDOM_VALUE_FOR_USER_SESSION,
+                MAX_FIXED_RANDOM_VALUE_FOR_USER_SESSION));
+    }
 
     @Override
     public void valueBound(HttpSessionBindingEvent event) {
@@ -112,19 +134,7 @@ public class GraphicImageManager implements HttpSessionBindingListener {
 
         // (2) The primefaces stream content is opened and it should be possible to write the data to a file
         // we want to make sure we do not create file creation leakage for the same unique id
-        if (storedContent.containsKey(oldUniqueId)) {
-            File tempFileCreatedInAPreviousRenderingOfCurrentView = new File(storedContent.get(oldUniqueId));
-            if (tempFileCreatedInAPreviousRenderingOfCurrentView.exists()) {
-                tempFileCreatedInAPreviousRenderingOfCurrentView.delete();
-                storedContent.remove(oldUniqueId);
-                LOGGER.log(
-                        Level.FINE,
-                        String.format(
-                                "Deleting temp file with absolute path: %1$s . A new primefaces dynamic stream is available to write data for the same ui coponent"
-                                        + " and we do not wish to keep alive stale data.",
-                                storedContent.get(oldUniqueId)));
-            }
-        }
+        deleteStaleTempFileByUniqueId(oldUniqueId);
 
         // (3) Since we will be saving a new temp image we want to make sure that we advance the uniqueId
         // so that the browser is sure do download a new image for this uniqueId instead of keep using the old cached
@@ -151,25 +161,7 @@ public class GraphicImageManager implements HttpSessionBindingListener {
                     "Unexpected error took place while attempting to save primefaces streamed content image to the temporary fold",
                     e);
         } finally {
-            // closing the channels
-            try {
-                if (inputChannel != null) {
-                    inputChannel.close();
-                }
-            } catch (Exception e) {
-                LOGGER.log(
-                        Level.SEVERE,
-                        "Unexpected error took place while attempting to close the input stream of the image to be saved into a temporary location",
-                        e);
-            }
-            try {
-                if (outputChannel != null) {
-                    outputChannel.close();
-                }
-            } catch (Exception e) {
-                LOGGER.log(Level.SEVERE,
-                        "Unexpected error took place while attempting to close the output stream of the temp file", e);
-            }
+            closeChannels(inputChannel, outputChannel);
         }
 
         // A new temp file was saved under this uniqueId
@@ -215,6 +207,11 @@ public class GraphicImageManager implements HttpSessionBindingListener {
     // BEGIN: CANONICAL ID MANAGEMENT
     // /////////////////////////////////////////////////
     /**
+     * Returns the current unique id for a given canonical value. The unique ids need to be random to the browser but
+     * cannot be produced in absolutely random manner within the implementation. The random id that the browser will see
+     * must appeaer unique to bypass its cache. But internally, the was it is produced has to be well defined, so that
+     * when a page refresh takes place we can stream the old file, and when a new open stream is available we can
+     * produce a new random id and temporary file.
      *
      * @param canonicalUniqueId
      *            the canonical id for the ui component
@@ -222,8 +219,8 @@ public class GraphicImageManager implements HttpSessionBindingListener {
      *         canonical id and the current index of generated content for the component
      */
     private String getCurrentUniqueId(String canonicalUniqueId) {
-        return String
-                .format("CANONIAL%1$sUNIQUE%2$s", canonicalUniqueId, getCurrentCanonicalIdCount(canonicalUniqueId));
+        return String.format("CANONICAL%1$sINC%2$sSESSRAND%3$sEND", canonicalUniqueId,
+                getCurrentCanonicalIdCount(canonicalUniqueId), this.sessionRandomId);
     }
 
     /**
@@ -252,4 +249,83 @@ public class GraphicImageManager implements HttpSessionBindingListener {
         canonicalIdToGenerationCount.put(canonicalUniqueId, nextCanonicalIdCount);
         return nextCanonicalIdCount;
     }
+
+    // /////////////////////////////////////////////////
+    // BEGIN: HELPER LOGIC
+    // /////////////////////////////////////////////////
+    /**
+     * The renderer is asking for a new StreamContent image to be renderer for the same old client id for which a tmp
+     * image has already been produced. Proactively clean up the temp folder
+     *
+     * @param oldUniqueId
+     *            unique id that identifies a temp file that is no longer needed and should be deleted
+     */
+    private void deleteStaleTempFileByUniqueId(final String oldUniqueId) {
+        if (storedContent.containsKey(oldUniqueId)) {
+            File tempFileCreatedInAPreviousRenderingOfCurrentView = new File(storedContent.get(oldUniqueId));
+            if (tempFileCreatedInAPreviousRenderingOfCurrentView.exists()) {
+                if (tempFileCreatedInAPreviousRenderingOfCurrentView.delete()) {
+                    storedContent.remove(oldUniqueId);
+                    LOGGER.log(
+                            Level.FINE,
+                            String.format(
+                                    "Deleting temp file with absolute path: %1$s . A new primefaces dynamic stream is available to write data for the same ui coponent"
+                                            + " and we do not wish to keep alive stale data.",
+                                    storedContent.get(oldUniqueId)));
+                } else {
+                    LOGGER.log(Level.WARNING, String.format("Delete file not successful for file: %1$s ",
+                            tempFileCreatedInAPreviousRenderingOfCurrentView.getAbsolutePath()));
+                }
+
+            }
+        }
+    }
+
+    // /////////////////////////////////////////////////
+    // BEGIN: TRIVIAL
+    // /////////////////////////////////////////////////
+    /**
+     * Generate a random int within a given range
+     *
+     * @param min
+     *            min random value
+     * @param max
+     *            max random value
+     * @return a random number between min and max random value
+     */
+    private int randomWithRange(int min, int max) {
+        int range = (max - min) + 1;
+        return (int) (Math.random() * range) + min;
+    }
+
+    /**
+     * Close the channel resources created to copy the StreamContent to a temp file
+     *
+     * @param inputChannel
+     *            a channel over the p:graphic image inputstream
+     * @param outputChannel
+     *            a channel over temporary file outputstream
+     */
+    private void closeChannels(ReadableByteChannel inputChannel, WritableByteChannel outputChannel) {
+        // closing the channels
+        try {
+            if (inputChannel != null) {
+                inputChannel.close();
+            }
+        } catch (Exception e) {
+            LOGGER.log(
+                    Level.SEVERE,
+                    "Unexpected error took place while attempting to close the input stream of the image to be saved into a temporary location",
+                    e);
+        }
+        try {
+            if (outputChannel != null) {
+                outputChannel.close();
+            }
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE,
+                    "Unexpected error took place while attempting to close the output stream of the temp file", e);
+        }
+    }
+
 }
