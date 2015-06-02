@@ -31,15 +31,21 @@ import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
+ * Graphic image manager is responsible for managing all the temporary files saved in the OS tmp folder for each HTTP
+ * session that took advantage of the Advanced Graphic Image Manager.
+ *
+ * <P>
+ * NOTES: As session scoped bean with state synchronization is needed. The only synchronization object used in this
+ * class is stored content. Any public API is obliged to acquire this lock.
+ *
  */
 @SessionScoped
 @ManagedBean(name = "GraphicImageManager")
-public class GraphicImageManager implements HttpSessionBindingListener {
+public class GraphicImageManager implements HttpSessionBindingListener, java.io.Serializable {
 
     private static final Logger LOGGER = Logger.getLogger(GraphicImageManager.class.getCanonicalName());
 
@@ -66,7 +72,7 @@ public class GraphicImageManager implements HttpSessionBindingListener {
      * AdvancedGraphicImageRenderer * Contains dynamic graphic image files creates in the context of the current
      * session. A map of UniqueIds -> To AbsoluteFilePath
      */
-    private final Map<String, String> storedContent = new ConcurrentHashMap<String, String>();
+    private final Map<String, String> storedContent = new HashMap<String, String>();
 
     /**
      * Map of canonicalId to count of times temporary images have been produced for the canonical id.
@@ -100,11 +106,17 @@ public class GraphicImageManager implements HttpSessionBindingListener {
 
     @Override
     public void valueUnbound(HttpSessionBindingEvent event) {
-        for (String tempFile : storedContent.values()) {
-            File f = new File(tempFile);
-            f.delete();
+        synchronized (storedContent) {
+            for (String tempFile : storedContent.values()) {
+                File f = new File(tempFile);
+                f.delete();
+            }
         }
     }
+
+    // ////////////////////////////////////////
+    // BEGIN: API
+    // ////////////////////////////////////////
 
     /**
      * During the rendering phase of p:graphic image for which the advanced graphic image feature is enabled the
@@ -120,86 +132,71 @@ public class GraphicImageManager implements HttpSessionBindingListener {
      * @return a uniqueId that is based on the canonical id and whose value changes each time a new image resource needs
      *         to be saved.
      */
-    public synchronized String registerImage(final StreamedContent content, final String canonicalId) {
-        final InputStream inputStream = content.getStream();
-        // (1) Trivial scenario - there is nothing to be done here because
-        // the user is most likely doing a page refresh and the image already exists in a temp file location
-        final String oldUniqueId = getCurrentUniqueId(canonicalId);
-        if (!GraphicImageUtil.isInputStreamAvailable(inputStream)) {
-            LOGGER.log(Level.FINEST,
-                    "The streamed content for uniqueId will not be saved to a new file since it already exists in the cache. UiqueId: "
-                            + oldUniqueId);
-            return oldUniqueId;
+    public String registerImage(final StreamedContent content, final String canonicalId) {
+        synchronized (storedContent) {
+            final InputStream inputStream = content.getStream();
+            // (1) Trivial scenario - there is nothing to be done here because
+            // the user is most likely doing a page refresh and the image already exists in a temp file location
+            final String oldUniqueId = getCurrentUniqueId(canonicalId);
+            if (!GraphicImageUtil.isInputStreamAvailable(inputStream)) {
+                LOGGER.log(Level.FINEST,
+                        "The streamed content for uniqueId will not be saved to a new file since it already exists in the cache. UiqueId: "
+                                + oldUniqueId);
+                return oldUniqueId;
+            }
+
+            // (2) The primefaces stream content is opened and it should be possible to write the data to a file
+            // we want to make sure we do not create file creation leakage for the same unique id
+            deleteStaleTempFileByUniqueId(oldUniqueId);
+
+            // (3) Since we will be saving a new temp image we want to make sure that we advance the uniqueId
+            // so that the browser is sure do download a new image for this uniqueId instead of keep using the old
+            // cached
+            // image
+            incrementCanonicalIdCount(canonicalId);
+            String newUniqueId = getCurrentUniqueId(canonicalId);
+
+            // (4) The uniqueId is either brand new or we are dealing with a rendering of new content
+            // for the same UI component and we wish the data of the image not to be stale.
+            // A new temp file will produced with the stream content
+            ReadableByteChannel inputChannel = null;
+            WritableByteChannel outputChannel = null;
+            try {
+                File tempFile = File.createTempFile(newUniqueId, "primefaces");
+                storedContent.put(newUniqueId, tempFile.getAbsolutePath());
+                // get a channel from the stream
+                inputChannel = Channels.newChannel(inputStream);
+                outputChannel = Channels.newChannel(new FileOutputStream(tempFile));
+                // copy the channels
+                fastChannelCopy(inputChannel, outputChannel);
+            } catch (IOException e) {
+                LOGGER.log(
+                        Level.SEVERE,
+                        "Unexpected error took place while attempting to save primefaces streamed content image to the temporary fold",
+                        e);
+            } finally {
+                closeChannels(inputChannel, outputChannel);
+            }
+
+            // A new temp file was saved under this uniqueId
+            return newUniqueId;
         }
-
-        // (2) The primefaces stream content is opened and it should be possible to write the data to a file
-        // we want to make sure we do not create file creation leakage for the same unique id
-        deleteStaleTempFileByUniqueId(oldUniqueId);
-
-        // (3) Since we will be saving a new temp image we want to make sure that we advance the uniqueId
-        // so that the browser is sure do download a new image for this uniqueId instead of keep using the old cached
-        // image
-        incrementCanonicalIdCount(canonicalId);
-        String newUniqueId = getCurrentUniqueId(canonicalId);
-
-        // (4) The uniqueId is either brand new or we are dealing with a rendering of new content
-        // for the same UI component and we wish the data of the image not to be stale.
-        // A new temp file will produced with the stream content
-        ReadableByteChannel inputChannel = null;
-        WritableByteChannel outputChannel = null;
-        try {
-            File tempFile = File.createTempFile(newUniqueId, "primefaces");
-            storedContent.put(newUniqueId, tempFile.getAbsolutePath());
-            // get a channel from the stream
-            inputChannel = Channels.newChannel(inputStream);
-            outputChannel = Channels.newChannel(new FileOutputStream(tempFile));
-            // copy the channels
-            fastChannelCopy(inputChannel, outputChannel);
-        } catch (IOException e) {
-            LOGGER.log(
-                    Level.SEVERE,
-                    "Unexpected error took place while attempting to save primefaces streamed content image to the temporary fold",
-                    e);
-        } finally {
-            closeChannels(inputChannel, outputChannel);
-        }
-
-        // A new temp file was saved under this uniqueId
-        return newUniqueId;
     }
 
     public StreamedContent retrieveImage(String uniqueId) {
-        StreamedContent result = null;
-        String tempFile = storedContent.get(uniqueId);
-        if (tempFile != null) {
-            File f = new File(tempFile);
-            try {
-                result = new DefaultStreamedContent(new FileInputStream(f));
-            } catch (FileNotFoundException e) {
-                // FIXME
-                e.printStackTrace();
+        synchronized (storedContent) {
+            StreamedContent result = null;
+            String tempFile = storedContent.get(uniqueId);
+            if (tempFile != null) {
+                File f = new File(tempFile);
+                try {
+                    result = new DefaultStreamedContent(new FileInputStream(f));
+                } catch (FileNotFoundException e) {
+                    // FIXME
+                    e.printStackTrace();
+                }
             }
-        }
-        return result;
-    }
-
-    private static void fastChannelCopy(final ReadableByteChannel src, final WritableByteChannel dest)
-            throws IOException {
-        final ByteBuffer buffer = ByteBuffer.allocateDirect(16 * 1024);
-        while (src.read(buffer) != -1) {
-            // prepare the buffer to be drained
-            buffer.flip();
-            // write to the channel, may block
-            dest.write(buffer);
-            // If partial transfer, shift remainder down
-            // If buffer is empty, same as doing clear()
-            buffer.compact();
-        }
-        // EOF will leave buffer in fill state
-        buffer.flip();
-        // make sure the buffer is fully drained.
-        while (buffer.hasRemaining()) {
-            dest.write(buffer);
+            return result;
         }
     }
 
@@ -253,6 +250,26 @@ public class GraphicImageManager implements HttpSessionBindingListener {
     // /////////////////////////////////////////////////
     // BEGIN: HELPER LOGIC
     // /////////////////////////////////////////////////
+    private static void fastChannelCopy(final ReadableByteChannel src, final WritableByteChannel dest)
+            throws IOException {
+        final ByteBuffer buffer = ByteBuffer.allocateDirect(16 * 1024);
+        while (src.read(buffer) != -1) {
+            // prepare the buffer to be drained
+            buffer.flip();
+            // write to the channel, may block
+            dest.write(buffer);
+            // If partial transfer, shift remainder down
+            // If buffer is empty, same as doing clear()
+            buffer.compact();
+        }
+        // EOF will leave buffer in fill state
+        buffer.flip();
+        // make sure the buffer is fully drained.
+        while (buffer.hasRemaining()) {
+            dest.write(buffer);
+        }
+    }
+
     /**
      * The renderer is asking for a new StreamContent image to be renderer for the same old client id for which a tmp
      * image has already been produced. Proactively clean up the temp folder
