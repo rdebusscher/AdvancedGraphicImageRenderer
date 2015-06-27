@@ -7,7 +7,7 @@ See [blog text](http://jsfcorner.blogspot.be/2012/11/advanced-primefaces-graphic
 
 Version | For PrimeFaces
 -----------| -------------
-1.0     | 3.5
+1.0     | 3.4.1 / 3.5
 1.1     | 4.0
 1.2.1   | 5.x
 
