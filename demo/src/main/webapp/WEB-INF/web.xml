@@ -17,9 +17,10 @@
  * specific language governing permissions and limitations
  * under the License.
 -->
-<web-app id="Demo" version="3.0"
-         xmlns="http://java.sun.com/xml/ns/j2ee" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://java.sun.com/xml/ns/j2ee http://java.sun.com/xml/ns/j2ee/web-app_3_0.xsd">
+<web-app xmlns="http://java.sun.com/xml/ns/javaee"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://java.sun.com/xml/ns/javaee http://java.sun.com/xml/ns/javaee/web-app_3_0.xsd"
+         version="3.0">
 
     <display-name>demo</display-name>
 
@@ -44,10 +45,6 @@
         <welcome-file>index.jsf</welcome-file>
     </welcome-file-list>
 
-    <!--listener>
-        <description>HttpSessionBindingListener</description>
-        <listener-class>be.rubus.web.jsf.primefaces.GraphicImageManager</listener-class>
-    </listener-->
 
     <session-config>
         <session-timeout>1</session-timeout>
