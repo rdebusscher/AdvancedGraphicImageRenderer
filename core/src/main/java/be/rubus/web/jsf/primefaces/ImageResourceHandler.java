@@ -29,10 +29,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLEncoder;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  */
 public class ImageResourceHandler extends ResourceHandlerWrapper {
+
+    private static final Logger LOG = Logger.getLogger(ImageResourceHandler.class.getName());
 
     private ResourceHandler wrapped;
 
@@ -64,10 +68,14 @@ public class ImageResourceHandler extends ResourceHandlerWrapper {
 
             byte[] buffer = new byte[2048];
 
-            int length;
-            InputStream inputStream = streamedContent.getStream();
-            while ((length = (inputStream.read(buffer))) >= 0) {
-                externalContext.getResponseOutputStream().write(buffer, 0, length);
+            try {
+                int length;
+                InputStream inputStream = streamedContent.getStream();
+                while ((length = (inputStream.read(buffer))) >= 0) {
+                    externalContext.getResponseOutputStream().write(buffer, 0, length);
+                }
+            } finally {
+                closeStreamContent(streamedContent);
             }
 
             externalContext.responseFlushBuffer();
@@ -77,6 +85,17 @@ public class ImageResourceHandler extends ResourceHandlerWrapper {
             getWrapped().handleResourceRequest(context);
         }
 
+    }
+
+    private void closeStreamContent(StreamedContent streamedContent) {
+        try {
+            if (streamedContent != null) {
+                streamedContent.getStream().close();
+            }
+        } catch (Exception e) {
+            LOG.log(Level.SEVERE, "Unexpected error took while attempting to close the streamed content of temporary file associated to the advanced graphic image renderer",
+                    e);
+        }
     }
 }
 
