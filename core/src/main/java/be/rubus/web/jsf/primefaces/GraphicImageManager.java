@@ -39,7 +39,7 @@ import java.util.logging.Logger;
  */
 @SessionScoped
 @ManagedBean(name = "GraphicImageManager")
-public class GraphicImageManager implements HttpSessionBindingListener {
+public class GraphicImageManager implements HttpSessionBindingListener, Serializable {
 
     private static final Logger LOG = Logger.getLogger(GraphicImageManager.class.getName());
 
