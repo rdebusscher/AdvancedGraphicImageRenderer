@@ -1,0 +1,54 @@
+<html
+        xmlns:h="http://java.sun.com/jsf/html"
+        xmlns:p="http://primefaces.org/ui"
+        xmlns:comp="http://java.sun.com/jsf/composite/comp">
+<!--
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+-->
+<h:head>
+    <title>Simple JSF Facelets page</title>
+</h:head>
+
+<h:body>
+
+    <comp:customComp image="#{imageBean.image}"/>
+
+    <p:dataTable value="#{imageBean.dataList}" var="data">
+        <p:column headerText="Code">
+            <h:outputText value="#{data.code}"/>
+        </p:column>
+        <p:column headerText="Image">
+            <p:graphicImage value="#{data.image}">
+                <!--x:advancedRenderering value="true"/-->
+            </p:graphicImage>
+        </p:column>
+    </p:dataTable>
+
+
+    <!--
+       With this construct you can force the use of the advanced rendering
+       x -> xmlns:x="http://www.rubus.be/primefaces"
+
+    <p:graphicImage value="#{data.image}">
+       <x:advancedRenderering value="true"/>
+    </p:graphicImage>
+    -->
+
+</h:body>
+
+</html>
