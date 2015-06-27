@@ -24,6 +24,7 @@ import org.primefaces.model.StreamedContent;
 import javax.faces.bean.ManagedBean;
 import javax.faces.bean.RequestScoped;
 import javax.faces.bean.SessionScoped;
+import javax.faces.bean.ViewScoped;
 import javax.servlet.http.HttpSessionBindingEvent;
 import javax.servlet.http.HttpSessionBindingListener;
 import java.io.InputStream;
@@ -31,7 +32,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @ManagedBean(name = "imageBean")
-@RequestScoped
+@ViewScoped
 public class Bean  {
 	private StreamedContent image;
 	private List<Data> dataList;
