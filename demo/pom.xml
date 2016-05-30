@@ -78,6 +78,11 @@
             <url>http://repository.primefaces.org</url>
             <layout>default</layout>
         </repository>
+        <repository>
+            <id>nexus_C4J</id>
+            <name>OpenSource Nexus of C4J</name>
+            <url>http://nexus-osc4j.rhcloud.com/content/repositories/releases</url>
+        </repository>
     </repositories>
 
     <dependencies>
@@ -86,7 +91,7 @@
         <dependency>
             <groupId>be.rubus.web.jsf.primefaces</groupId>
             <artifactId>advanced-graphic-image</artifactId>
-            <version>1.2.1</version>
+            <version>1.2.2</version>
         </dependency>
 
         <dependency>

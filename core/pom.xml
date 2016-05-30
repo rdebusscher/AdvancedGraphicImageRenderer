@@ -26,7 +26,7 @@
     <artifactId>advanced-graphic-image</artifactId>
     <name>Advanced Graphic image renderer</name>
     <packaging>jar</packaging>
-    <version>1.2.1</version>
+    <version>1.2.2</version>
 
     <properties>
         <primefaces.version>5.0</primefaces.version>
