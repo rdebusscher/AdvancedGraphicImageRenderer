@@ -10,8 +10,10 @@ Version | For PrimeFaces
 1.0     | 3.4.1 / 3.5
 1.1     | 4.0
 1.2.1   | 5.x
+1.2.2   | 5.x Fix for WildFly
 
 Version 1.2 has a bug!
+
 
 When you want to add the artifact, put following snippets in your `pom.xml`
 
